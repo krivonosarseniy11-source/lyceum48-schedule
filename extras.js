@@ -16,7 +16,7 @@ function renderExtras(all=filteredLessons()){
  $('favorites').innerHTML=favorites.map((f,i)=>`<div><button data-open-favorite="${i}">${esc(f.label)}</button><button data-remove-favorite="${i}" aria-label="Убрать ${esc(f.label)} из избранного">×</button></div>`).join('');
  $('myClass').textContent='★ '+(storage.get('myClass')||'Мой класс');
  const daily=all.filter(l=>l.day===day),p=T.dayPlan(daily),fmt=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
- $('dayPlan').innerHTML=view==='day'&&p?`<strong>${S.DAYS[day]}</strong><span>${fmt(p.start)}–${fmt(p.end)}</span><span>${p.count} уроков по звонкам</span><span>${p.minutes} мин занятий</span><span>${p.breaks} мин между занятиями</span>`:'';
+ $('dayPlan').innerHTML=view==='day'&&p?`<strong>${S.DAYS[day]}</strong><span>${fmt(p.start)}–${fmt(p.end)}</span><span>${p.count} ${plural(p.count,'урок','урока','уроков')} по звонкам</span><span>${p.minutes} мин занятий</span><span>${p.breaks} мин между занятиями</span>`:'';
  renderRooms();
 }
 function renderLoadChart(all){

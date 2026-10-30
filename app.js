@@ -11,7 +11,8 @@ const schoolDay=()=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(new Intl
 let mode=['class','teacher','room'].includes(params.get('mode'))?params.get('mode'):'class';
 let entity=params.get('entity')||storage.get('myClass')||'5А',day=params.has('day')&&/^[0-5]$/.test(params.get('day'))?+params.get('day'):displayDay((schoolDay()+6)%7),view=(params.get('view')||storage.get('view'))==='week'?'week':'day',data=null,refreshing=false;
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const countText=n=>`${n} ${n%10===1&&n%100!==11?'занятие':n%10>=2&&n%10<=4&&(n%100<12||n%100>14)?'занятия':'занятий'}`;
+const plural=(n,one,few,many)=>n%10===1&&n%100!==11?one:n%10>=2&&n%10<=4&&(n%100<12||n%100>14)?few:many;
+const countText=n=>`${n} ${plural(n,'занятие','занятия','занятий')}`;
 document.documentElement.dataset.theme=storage.get('theme')||'light';
 function toast(text){$('toast').textContent=text;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2800)}
 function options(select,items,value,empty){select.innerHTML=(empty?`<option value="">${empty}</option>`:'')+items.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');select.value=items.includes(value)?value:(empty?'':items[0]||'')}
@@ -49,8 +50,8 @@ function renderStats(){
  const ls=data.lessons.filter(l=>S.matches(l,{mode,entity:scope==='selected'&&!$('searchAll').checked?entity:'',search:$('search').value,subject:$('subject').value})&&T.atTime(l,$('atTime').value)&&(period==='week'||l.day===day));
  const rows=T.stats(ls,dimension,S),known=ls.filter(l=>T.slot(l.number)),minutes=known.reduce((sum,l)=>{const s=T.slot(l.number);return sum+s.end-s.start},0);
  $('statsContext').textContent=`${scope==='selected'?$('title').textContent:'Вся первая смена'} · ${period==='week'?'недельный шаблон':S.DAYS[day]}${$('search').value||$('subject').value||$('atTime').value?' · с учётом фильтров':''}`;
- const metrics=[[ls.length,'занятий'],[new Set(ls.map(l=>l.class)).size,'классов'],[new Set(ls.flatMap(S.teachers)).size,'учителей'],[new Set(ls.flatMap(S.rooms)).size,'кабинетов'],[minutes,'учебных минут'],[new Set(ls.map(l=>l.subject.replace(/\s*\/\s*/g,'/'))).size,'предметов']];
- $('statsMetrics').innerHTML=metrics.map(([v,t])=>`<div><strong>${v.toLocaleString('ru-RU')}</strong><span>${t}</span></div>`).join('');
+ const metrics=[[ls.length,['занятие','занятия','занятий']],[new Set(ls.map(l=>l.class)).size,['класс','класса','классов']],[new Set(ls.flatMap(S.teachers)).size,['учитель','учителя','учителей']],[new Set(ls.flatMap(S.rooms)).size,['кабинет','кабинета','кабинетов']],[minutes,['учебная минута','учебные минуты','учебных минут']],[new Set(ls.map(l=>l.subject.replace(/\s*\/\s*/g,'/'))).size,['предмет','предмета','предметов']]];
+ $('statsMetrics').innerHTML=metrics.map(([v,t])=>`<div><strong>${v.toLocaleString('ru-RU')}</strong><span>${Array.isArray(t)?plural(v,...t):t}</span></div>`).join('');
  $('statsGroupHeading').textContent={subject:'Предмет',teacher:'Учитель',room:'Кабинет',time:'Время',class:'Класс'}[dimension];
  if(typeof renderLoadChart==='function')renderLoadChart(ls);
  $('statsRows').innerHTML=rows.length?rows.map(g=>`<tr><th scope="row">${esc(g.name)}</th><td>${g.count}</td><td>${g.minutes}${g.unknown?` <small>+ ${g.unknown} без времени</small>`:''}</td><td>${g.days}</td><td>${g.classes}</td></tr>`).join(''):'<tr><td colspan="5">Нет занятий по выбранным условиям.</td></tr>';
