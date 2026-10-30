@@ -1,12 +1,12 @@
 'use strict';
-const S=window.Schedule,$=id=>document.getElementById(id);
+const S=window.Schedule,T=window.Timing,$=id=>document.getElementById(id);
 const SHEET='1tGzeVcjc4gKja-uegpOFkvOW61I50SP3zPipSCfTxqY';
 const SOURCE=`https://docs.google.com/spreadsheets/d/${SHEET}/gviz/tq?gid=82782917&headers=0`;
 const storage={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
 const params=new URLSearchParams(location.search);
 const schoolDay=()=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Moscow',weekday:'short'}).format(new Date()));
 let mode=['class','teacher','room'].includes(params.get('mode'))?params.get('mode'):'class';
-let entity=params.get('entity')||storage.get('myClass')||'5А',day=Math.max(0,schoolDay()-1),view='day',data=null,refreshing=false;
+let entity=params.get('entity')||storage.get('myClass')||'5А',day=(schoolDay()+6)%7,view='day',data=null,refreshing=false;
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const countText=n=>`${n} ${n%10===1&&n%100!==11?'занятие':n%10>=2&&n%10<=4&&(n%100<12||n%100>14)?'занятия':'занятий'}`;
 document.documentElement.dataset.theme=storage.get('theme')||'light';
@@ -25,19 +25,42 @@ function populate(){
 function render(){
  if(!data)return;
  const criteria={mode,entity,search:$('search').value,subject:$('subject').value};
- const all=data.lessons.filter(l=>S.matches(l,criteria));
+ const all=data.lessons.filter(l=>S.matches(l,criteria)&&T.atTime(l,$('atTime').value));
  $('title').textContent=mode==='class'?`${entity} класс`:mode==='teacher'?entity:`Кабинет ${entity}`;
  $('remember').textContent=storage.get('myClass')===entity?'★ Мой класс':'☆ Сделать моим классом';
  $('clear').hidden=!criteria.search;
  $('days').innerHTML=S.DAYS.map((d,i)=>`<button data-day="${i}" class="${day===i&&view==='day'?'active':''}" aria-pressed="${day===i&&view==='day'}"><span>${['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][i]}</span><small>${all.filter(l=>l.day===i).length}</small></button>`).join('');
  document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===view);b.setAttribute('aria-pressed',b.dataset.view===view)});
  const days=view==='week'?[0,1,2,3,4,5,6]:[day];
- $('summary').textContent=`${view==='week'?'Вся неделя':S.DAYS[day]} · ${countText(view==='week'?all.length:all.filter(l=>l.day===day).length)}${criteria.search||criteria.subject?' по вашему запросу':''}`;
+ $('summary').textContent=`${view==='week'?'Вся неделя':S.DAYS[day]} · ${countText(view==='week'?all.length:all.filter(l=>l.day===day).length)}${criteria.search||criteria.subject||$('atTime').value?` по вашему запросу${$('atTime').value?' · '+$('atTime').value+' МСК':''}`:''}`;
  $('schedule').dataset.printTitle=$('title').textContent+' · '+(view==='week'?'Вся неделя':S.DAYS[day]);
- const card=l=>`<article class="lesson" style="--accent:${color(l.subject)}"><div class="lesson-number">${l.number}<small>УРОК</small></div><div class="lesson-content"><div class="lesson-tags">${mode!=='class'?`<button data-class="${esc(l.class)}">${esc(l.class)} класс</button>`:''}${l.teacher.includes('/')||(/\//.test(l.subject))?'<span>По подгруппам</span>':''}</div><h3>${esc(l.subject)}</h3><div class="teachers">${S.teachers(l).map(t=>`<button data-teacher="${esc(t)}">${esc(t)}</button>`).join('<span> / </span>')||'<span>Учитель не указан</span>'}</div></div><div class="room">${S.rooms(l).map(r=>`<button data-room="${esc(r)}">${r==='Спортзал'?'Спортзал':esc(r)}<small>${r==='Спортзал'?'физкультура':'кабинет'}</small></button>`).join('')||'<span class="unknown">—<small>не указан</small></span>'}</div></article>`;
+ const card=l=>`<article class="lesson" data-lesson-day="${l.day}" data-lesson-number="${l.number}" style="--accent:${color(l.subject)}"><div class="lesson-number">${l.number}<small>УРОК</small></div><div class="lesson-content"><div class="lesson-time">${T.slot(l.number)?.label||'Время не указано'} <span class="current-label">Сейчас идёт</span></div><div class="lesson-tags">${mode!=='class'?`<button data-class="${esc(l.class)}">${esc(l.class)} класс</button>`:''}${l.teacher.includes('/')||(/\//.test(l.subject))?'<span>По подгруппам</span>':''}</div><h3>${esc(l.subject)}</h3><div class="teachers">${S.teachers(l).map(t=>`<button data-teacher="${esc(t)}">${esc(t)}</button>`).join('<span> / </span>')||'<span>Учитель не указан</span>'}</div></div><div class="room">${S.rooms(l).map(r=>`<button data-room="${esc(r)}">${r==='Спортзал'?'Спортзал':esc(r)}<small>${r==='Спортзал'?'физкультура':'кабинет'}</small></button>`).join('')||'<span class="unknown">—<small>не указан</small></span>'}</div></article>`;
  $('schedule').className=view==='week'?'week':'';
- $('schedule').innerHTML=days.map(d=>{const ls=all.filter(l=>l.day===d).sort((a,b)=>a.number-b.number||a.class.localeCompare(b.class,'ru',{numeric:true}));return `<section class="day-group">${view==='week'?`<h3 class="day-heading">${S.DAYS[d]} <span>${ls.length}</span></h3>`:''}${ls.length?ls.map(card).join(''):`<div class="empty"><div>☀</div><h3>${criteria.search||criteria.subject?'Ничего не нашлось':'Уроков в таблице нет'}</h3><p>${criteria.search||criteria.subject?'Попробуйте другой запрос или сбросьте фильтры.':'Для выбранного дня и расписания занятия не указаны.'}</p></div>`}</section>`}).join('');
+ $('schedule').innerHTML=days.map(d=>{const ls=all.filter(l=>l.day===d).sort((a,b)=>a.number-b.number||a.class.localeCompare(b.class,'ru',{numeric:true}));return `<section class="day-group">${view==='week'?`<h3 class="day-heading">${S.DAYS[d]} <span>${ls.length}</span></h3>`:''}${ls.length?ls.map(card).join(''):`<div class="empty"><div>☀</div><h3>${criteria.search||criteria.subject||$('atTime').value?'Ничего не нашлось':'Уроков в таблице нет'}</h3><p>${criteria.search||criteria.subject||$('atTime').value?'Попробуйте другой запрос или сбросьте фильтры.':'Для выбранного дня и расписания занятия не указаны.'}</p></div>`}</section>`}).join('');
  const u=new URL(location.href);u.searchParams.set('mode',mode);u.searchParams.set('entity',entity);history.replaceState(null,'',u);
+ renderStats();tick();
+}
+function renderStats(){
+ if(!data)return;
+ const scope=$('statsScope').value,period=$('statsPeriod').value,dimension=$('statsDimension').value;
+ const ls=data.lessons.filter(l=>S.matches(l,{mode,entity:scope==='selected'?entity:'',search:$('search').value,subject:$('subject').value})&&T.atTime(l,$('atTime').value)&&(period==='week'||l.day===day));
+ const rows=T.stats(ls,dimension,S),known=ls.filter(l=>T.slot(l.number)),minutes=known.reduce((sum,l)=>{const s=T.slot(l.number);return sum+s.end-s.start},0);
+ $('statsContext').textContent=`${scope==='selected'?$('title').textContent:'Вся первая смена'} · ${period==='week'?'недельный шаблон':S.DAYS[day]}${$('search').value||$('subject').value||$('atTime').value?' · с учётом фильтров':''}`;
+ const metrics=[[ls.length,'занятий'],[new Set(ls.map(l=>l.class)).size,'классов'],[new Set(ls.flatMap(S.teachers)).size,'учителей'],[new Set(ls.flatMap(S.rooms)).size,'кабинетов'],[minutes,'учебных минут'],[ls.length-known.length,'без времени']];
+ $('statsMetrics').innerHTML=metrics.map(([v,t])=>`<div><strong>${v.toLocaleString('ru-RU')}</strong><span>${t}</span></div>`).join('');
+ $('statsGroupHeading').textContent={subject:'Предмет',teacher:'Учитель',room:'Кабинет',time:'Время',class:'Класс'}[dimension];
+ $('statsRows').innerHTML=rows.length?rows.map(g=>`<tr><th scope="row">${esc(g.name)}</th><td>${g.count}</td><td>${g.minutes}${g.unknown?` <small>+ ${g.unknown} без времени</small>`:''}</td><td>${g.days}</td><td>${g.classes}</td></tr>`).join(''):'<tr><td colspan="5">Нет занятий по выбранным условиям.</td></tr>';
+}
+function tick(){
+ const c=T.clock();$('liveClock').textContent=new Date().toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' МСК';
+ if(!data)return;
+ const ls=data.lessons.filter(l=>S.matches(l,{mode,entity})),state=T.live(ls);
+ const names=items=>items.map(l=>`${l.subject}${mode==='class'?'':` · ${l.class}`}${l.room?` · каб. ${l.room}`:''}`).join('; ');
+ const label=esc($('title').textContent);
+ if(state.current.length){$('liveState').innerHTML=`<small>${label} · ${state.current[0].number} урок сейчас</small><strong>${esc(names(state.current))}</strong><span>До перемены <b>${T.duration(state.remaining)}</b></span>`;}
+ else{$('liveState').innerHTML=`<small>${label}</small><strong>${state.off|| (c.day===6?'Воскресенье':state.next?.date===c.date?(c.seconds<8*3600?'До начала занятий':'Сейчас урока нет'):'На сегодня уроков со временем нет')}</strong><span>${state.unknown.length?'Есть занятия без указанного времени — проверьте расписание.':'Обратный отсчёт учитывает выбранный класс, учителя или кабинет.'}</span>`;}
+ $('liveNext').innerHTML=state.next?`<small>Следующий урок · ${new Date(state.next.date+'T12:00:00Z').toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'short'})} · ${T.slot(state.next.lessons[0].number).label}</small><strong>${esc(names(state.next.lessons))}</strong><span>До урока <b>${T.duration(state.next.seconds)}</b></span>`:'<small>Следующий урок</small><strong>Не найден в календаре 2026–2027</strong>';
+ document.querySelectorAll('[data-lesson-day]').forEach(el=>{const s=T.slot(+el.dataset.lessonNumber);el.classList.toggle('is-current',!state.off&&+el.dataset.lessonDay===c.day&&!!s&&c.seconds>=s.start*60&&c.seconds<s.end*60)});
 }
 function color(s){if(/математ|геометр|физик/i.test(s))return '#d5a744';if(/русск|литерат/i.test(s))return '#8089bf';if(/физическ.*культур/i.test(s))return '#64a88a';if(/англий/i.test(s))return '#d68d76';return '#8eaeaf'}
 function accept(payload,date,kind){data=S.parse(payload);populate();$('status').textContent=`${kind} · ${new Date(date).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} МСК`;$('status').classList.toggle('warning',kind!=='Из таблицы');}
@@ -57,7 +80,13 @@ document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.datase
 $('entity').onchange=()=>{entity=$('entity').value;$('subject').value='';populate()};
 $('search').oninput=render;$('subject').onchange=render;
 $('clear').onclick=()=>{$('search').value='';render();$('search').focus()};
-$('reset').onclick=()=>{$('search').value='';$('subject').value='';render()};
+$('reset').onclick=()=>{$('search').value='';$('subject').value='';$('atTime').value='';render()};
+$('atTime').oninput=render;
+$('nowTime').onclick=()=>{$('atTime').value=T.clock().time;day=T.clock().day;view='day';render()};
+$('clearTime').onclick=()=>{$('atTime').value='';render()};
+['statsScope','statsPeriod','statsDimension'].forEach(id=>$(id).onchange=renderStats);
+$('bellTable').innerHTML='<table><thead><tr><th>Урок</th><th>Начало</th><th>Конец</th><th>Перемена после</th></tr></thead><tbody>'+T.BELLS.map(([a,b],i)=>`<tr><td>${i+1}</td><td>${a}</td><td>${b}</td><td>${T.BELLS[i+1]?T.minute(T.BELLS[i+1][0])-T.minute(b)+' мин':'—'}</td></tr>`).join('')+'</tbody></table>';
+setInterval(tick,1000);tick();
 $('days').onclick=e=>{const b=e.target.closest('[data-day]');if(b){day=+b.dataset.day;view='day';render()}};
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;render()});
 $('today').onclick=()=>{day=(schoolDay()+6)%7;view='day';render()};
