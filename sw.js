@@ -1,0 +1,9 @@
+'use strict';
+const CACHE='lyceum48-shell-v1';
+const SHELL=['./','index.html','style.css','app.js','parser.js','timing.js','extras.js','snapshot.json','manifest.webmanifest','assets/logo.png','assets/lyceum.webp','assets/icon192.png','assets/icon512.png'];
+self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
+self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('lyceum48-shell-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('fetch',event=>{
+ const url=new URL(event.request.url);if(event.request.method!=='GET'||url.origin!==self.location.origin||!url.href.startsWith(self.registration.scope))return;
+ event.respondWith((async()=>{const cache=await caches.open(CACHE);try{const response=await fetch(event.request);if(response.ok)await cache.put(event.request.mode==='navigate'?'index.html':event.request,response.clone());return response}catch{const cached=await cache.match(event.request,{ignoreSearch:true});if(cached)return cached;if(event.request.mode==='navigate')return cache.match('index.html');return Response.error()}})());
+});

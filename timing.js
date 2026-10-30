@@ -1,6 +1,6 @@
 (function(root){
  'use strict';
- const BELLS=[['08:00','08:40'],['08:50','09:30'],['09:50','10:30'],['10:45','11:25'],['11:40','12:20'],['12:30','13:10'],['13:15','13:55']];
+ const BELLS=[['08:00','08:40'],['08:50','09:30'],['09:50','10:30'],['10:45','11:25'],['11:40','12:20'],['12:30','13:10'],['13:15','13:55'],['14:10','14:50']];
  const minute=t=>{if(!/^\d{2}:\d{2}$/.test(t||''))return null;const [h,m]=t.split(':').map(Number);return h<24&&m<60?h*60+m:null};
  const slot=n=>BELLS[n-1]?{start:minute(BELLS[n-1][0]),end:minute(BELLS[n-1][1]),label:BELLS[n-1].join('–')}:null;
  const atTime=(l,time)=>{if(!time)return true;const s=slot(l.number),m=minute(time);return !!s&&m!==null&&m>=s.start&&m<s.end};
@@ -33,6 +33,18 @@
   }
   return [...groups.values()].map(g=>({...g,days:g.days.size,classes:g.classes.size})).sort((a,b)=>dimension==='time'?parseInt(a.name)-parseInt(b.name):b.count-a.count||a.name.localeCompare(b.name,'ru',{numeric:true}));
  }
- const api={BELLS,minute,slot,atTime,clock,holiday,live,duration,stats};
+ function dayPlan(lessons){const slots=[...new Set(lessons.map(l=>l.number))].map(slot).filter(Boolean).sort((a,b)=>a.start-b.start);if(!slots.length)return null;const minutes=slots.reduce((sum,s)=>sum+s.end-s.start,0),start=slots[0].start,end=slots.at(-1).end;return {start,end,minutes,breaks:end-start-minutes,count:slots.length}}
+ function freeRooms(lessons,day,time,S){const all=[...new Set(lessons.flatMap(S.rooms))].filter(r=>r!=='Спортзал').sort((a,b)=>a.localeCompare(b,'ru',{numeric:true}));const busy=new Set(lessons.filter(l=>l.day===day&&atTime(l,time)).flatMap(S.rooms));return all.map(room=>({room,busy:busy.has(room)}))}
+ function calendar(lessons,now=new Date()){
+  const c=clock(now),escape=s=>String(s).replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;'),stamp=ms=>new Date(ms).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Lyceum48//Schedule//RU','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:Расписание лицея №48'];
+  for(let offset=0;offset<28;offset++){const civil=c.civil+offset*86400000,date=new Date(civil).toISOString().slice(0,10),day=(new Date(civil).getUTCDay()+6)%7;if(day===6||holiday(date))continue;
+   for(const l of lessons.filter(l=>l.day===day)){const s=slot(l.number);if(!s||offset===0&&s.end*60<=c.seconds)continue;const start=civil+(s.start-180)*60000,end=civil+(s.end-180)*60000;
+    lines.push('BEGIN:VEVENT',`UID:${encodeURIComponent(l.class)}-${date}-${l.number}@lyceum48-schedule`,`DTSTAMP:${stamp(now.getTime())}`,`DTSTART:${stamp(start)}`,`DTEND:${stamp(end)}`,`SUMMARY:${escape(l.subject+' · '+l.class)}`,`LOCATION:${escape(l.room||'Не указан')}`,`DESCRIPTION:${escape((l.teacher||'Учитель не указан')+'\nНедельный шаблон. Замены уточняйте в лицее.')}`,'END:VEVENT');
+   }
+  }
+  lines.push('END:VCALENDAR');const encoder=new TextEncoder();const folded=lines.flatMap(line=>{const out=[];let part='',bytes=0;for(const char of line){const size=encoder.encode(char).length;if(bytes+size>75){out.push(part);part=' ';bytes=1}part+=char;bytes+=size}out.push(part);return out});return folded.join('\r\n')+'\r\n';
+ }
+ const api={BELLS,minute,slot,atTime,clock,holiday,live,duration,stats,dayPlan,freeRooms,calendar};
  if(typeof module!=='undefined')module.exports=api;else root.Timing=api;
 })(typeof window==='undefined'?globalThis:window);
