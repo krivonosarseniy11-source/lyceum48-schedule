@@ -4,10 +4,10 @@ let favorites=readLocal('favorites',[]);if(!Array.isArray(favorites))favorites=[
 let notes=readLocal('lessonNotes',{});if(typeof notes!=='object'||Array.isArray(notes))notes={};
 const noteKey=l=>[l.class,l.day,l.number,l.subject].join('|');
 function lessonNote(l){const key=noteKey(l),text=String(notes[key]||'');return `<details class="lesson-note"><summary>${text?'✎ Есть заметка':'＋ Заметка'}</summary><label>Личная заметка · ${esc(l.class)}<textarea maxlength="1000" data-note="${esc(key)}" placeholder="Что взять с собой, задание или напоминание…">${esc(text)}</textarea></label><small>Сохраняется автоматически на этом устройстве</small></details>`}
-function filteredLessons(){return data?data.lessons.filter(l=>S.matches(l,{mode,entity:$('searchAll').checked?'':entity,search:$('search').value,subject:$('subject').value})&&T.atTime(l,$('atTime').value)):[]}
+function filteredLessons(){return data?data.lessons.filter(l=>matchesLesson(l,{mode,entity:$('searchAll').checked?'':entity,search:$('search').value,subject:$('subject').value})&&T.atTime(l,$('atTime').value)):[]}
 function download(name,text,type){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([text],{type}));a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 function csv(rows){return '\uFEFF'+rows.map(row=>row.map(value=>{let t=String(value??'');if(/^[=+@-]/.test(t))t="'"+t;return '"'+t.replace(/"/g,'""')+'"'}).join(';')).join('\r\n')}
-function clearFilters(){ $('search').value='';$('subject').value='';$('atTime').value='';$('searchAll').checked=false }
+function clearFilters(){ $('search').value='';$('subject').value='';$('atTime').value='';$('searchAll').checked=false;advanced=Q.readParams(new URLSearchParams());if(typeof syncAdvancedUI==='function')syncAdvancedUI() }
 function openEntity(newMode,newEntity){mode=newMode;entity=newEntity;clearFilters();populate()}
 function renderExtras(all=filteredLessons()){
  if(!data)return;

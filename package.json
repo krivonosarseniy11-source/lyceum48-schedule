@@ -1,1 +1,1 @@
-{"name":"lyceum48-schedule","version":"1.3.0","private":true,"scripts":{"test":"node --test --test-isolation=none tests/*.test.cjs","start":"python -m http.server 8080"}}
+{"name":"lyceum48-schedule","version":"1.4.0","private":true,"scripts":{"test":"node --test --test-isolation=none tests/*.test.cjs","start":"python -m http.server 8080"}}
