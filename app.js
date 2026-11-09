@@ -44,7 +44,7 @@ function render(){
  $('schedule').className=view==='week'?'week':'';
  $('schedule').innerHTML=days.map(d=>{const ls=all.filter(l=>l.day===d).sort((a,b)=>a.number-b.number||a.class.localeCompare(b.class,'ru',{numeric:true}));return `<section class="day-group">${view==='week'?`<h3 class="day-heading">${S.DAYS[d]} <span>${ls.length}</span></h3>`:''}${ls.length?ls.map(card).join(''):`<div class="empty"><div>☀</div><h3>${criteria.search||criteria.subject||$('atTime').value||Q.active(advanced)?'Ничего не нашлось':'Уроков в таблице нет'}</h3><p>${criteria.search||criteria.subject||$('atTime').value||Q.active(advanced)?'Попробуйте другой запрос или сбросьте фильтры.':'Для выбранного дня и расписания занятия не указаны.'}</p></div>`}</section>`}).join('');
  const u=new URL(location.href);const state={mode,entity,day,view,q:$('search').value,subject:$('subject').value,time:$('atTime').value,all:$('searchAll').checked?'1':'',...Q.params(advanced)};for(const [k,v] of Object.entries(state)){if(v!==''&&v!==false)u.searchParams.set(k,v);else u.searchParams.delete(k)}history.replaceState(null,'',u);storage.set('view',view);
- renderStats();tick();if(typeof renderExtras==='function')renderExtras(all);if(typeof renderSearchTools==='function')renderSearchTools();if(typeof renderDaily==='function')renderDaily();
+ renderStats();tick();if(typeof renderExtras==='function')renderExtras(all);if(typeof renderSearchTools==='function')renderSearchTools();if(typeof renderDaily==='function')renderDaily();if(typeof renderSchool==='function')renderSchool();
 }
 function renderStats(){
  if(!data)return;
