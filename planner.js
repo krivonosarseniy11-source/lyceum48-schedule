@@ -5,7 +5,7 @@ try{homework=P.tasks(readLocal('homework',[]))}catch{}
 let editingTask=null,plannerReady=false;
 const bagChecks=readLocal('bagChecks',{});
 const safeBagChecks=bagChecks&&typeof bagChecks==='object'&&!Array.isArray(bagChecks)?bagChecks:{};
-function saveHomework(){storage.set('homework',JSON.stringify(homework));renderTasks();renderBag()}
+function saveHomework(){storage.set('homework',JSON.stringify(homework));renderTasks();renderBag();if(typeof renderDaily==='function')renderDaily()}
 function plannerClasses(){
  if(!data)return;
  const preferred=mode==='class'?entity:storage.get('myClass')||data.classes[0];
