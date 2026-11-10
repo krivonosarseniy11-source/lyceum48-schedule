@@ -13,7 +13,7 @@ function schoolLink(mode,name,label=name,selectedDay=''){return `<button data-sc
 function renderSchool(){
  if(!data||schoolSource===data)return;
  const first=!schoolSource;schoolSource=data;
- const grades=[...new Set(data.classes.map(H.grade).filter(Boolean))].sort((a,b)=>+a-+b);options($('schoolGrade'),grades,$('schoolGrade').value||H.grade(mode==='class'?entity:storage.get('myClass')));
+ const grades=schoolComparisonGradeList();options($('schoolGrade'),grades,$('schoolGrade').value||H.grade(mode==='class'?entity:storage.get('myClass')));for(const option of $('schoolGrade').options)if(!data.classes.some(c=>H.grade(c)===option.value))option.textContent=option.value+' — нет данных';
  options($('schoolTodayClass'),data.classes,$('schoolTodayClass').value||(mode==='class'?entity:storage.get('myClass')));
  if(first)$('schoolTodayDate').value=T.clock().date;
  schoolSnapshot=H.school(data,S,T,$('schoolSplit').value==='split');renderSchoolReport();
@@ -23,7 +23,7 @@ function renderSchoolReport(){
  const snapshot=schoolSnapshot,total=snapshot.total;
  $('schoolTotals').innerHTML=[[snapshot.classes.length,'классов'],[total.count,'уроков / учебных часов'],[total.minutes,'минут занятий'],[schoolNumber(total.minutes/60),'часов по 60 минут'],[snapshot.teachers.length,'учителей'],[snapshot.rooms.length,'кабинетов / помещений']].map(([n,label])=>`<div><strong>${n}</strong><span>${label}</span></div>`).join('');
  document.querySelectorAll('[data-school-tab]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.schoolTab===schoolTab));
- $('schoolUnitLabel').hidden=schoolTab==='today';$('schoolSubjectLabel').hidden=!['subjects','parallels'].includes(schoolTab);$('schoolGradeLabel').hidden=schoolTab!=='parallels';
+ $('schoolUnitLabel').hidden=schoolTab==='today';$('schoolSubjectLabel').hidden=!['subjects','parallels'].includes(schoolTab);$('schoolGradeLabel').hidden=schoolTab!=='parallels'||$('schoolCompareMode').value!=='classes';$('schoolComparisonControls').hidden=schoolTab!=='parallels';
  for(const id of ['schoolTodayClassLabel','schoolTodayDateLabel','schoolTodayNow','schoolTodayOnlyLabel'])$(id).hidden=schoolTab!=='today';
  $('schoolContext').textContent=schoolLabels[schoolTab]+' · '+(schoolTab==='today'?'расписание на дату':'полная неделя · сортировка по '+schoolUnitText());
  $('schoolChart').innerHTML='';$('schoolInsight').textContent='';$('schoolReport').innerHTML='';schoolCSV=[];
@@ -63,19 +63,44 @@ function renderSchoolDays(){
  const headers=['День','Уроки / уч. ч.','Минуты','Часы по 60 мин','Классов','Без времени'];$('schoolReport').innerHTML=schoolTable(headers,rows.map(r=>[schoolLink('school','',S.DAYS[r.day],r.day),r.count,r.minutes,schoolNumber(r.minutes/60),r.classes,r.unknown]));schoolCSV=[headers,...rows.map(r=>[S.DAYS[r.day],r.count,r.minutes,schoolNumber(r.minutes/60),r.classes,r.unknown])];
  $('schoolMethod').textContent+='Нагрузка дня — сумма уроков всех классов. Одновременные уроки разных классов здесь складываются. При равенстве показаны все самые загруженные дни.';
 }
+let schoolComparedGrades=null,schoolComparedClasses={};
+function schoolComparisonGradeList(){return [...new Set([...Array.from({length:7},(_,i)=>String(i+5)),...data.classes.map(H.grade).filter(Boolean)])].sort((a,b)=>+a-+b)}
+function schoolComparisonChoices(){
+ const between=$('schoolCompareMode').value==='grades',grade=$('schoolGrade').value,availableGrades=[...new Set(data.classes.map(H.grade))];
+ if(schoolComparedGrades===null)schoolComparedGrades=[...availableGrades];
+ const choices=between?schoolComparisonGradeList():data.classes.filter(c=>H.grade(c)===grade).sort((a,b)=>a.localeCompare(b,'ru',{numeric:true}));
+ if(!between&&!Object.hasOwn(schoolComparedClasses,grade))schoolComparedClasses[grade]=[...choices];
+ const selected=between?schoolComparedGrades:schoolComparedClasses[grade];
+ $('schoolCompareLegend').textContent=between?'Выберите параллели для сравнения':'Выберите классы '+grade+'-й параллели';
+ $('schoolCompareChoices').innerHTML=choices.map(id=>{const available=between?availableGrades.includes(id):true;return `<label class="${available?'':'school-no-data'}"><input type="checkbox" value="${esc(id)}" ${selected.includes(id)?'checked':''}><span>${esc(between?id+'-я':id)}${available?'':' · нет данных'}</span></label>`}).join('');
+ $('schoolCompareBasisLabel').hidden=!between;
+ const missing=schoolComparisonGradeList().filter(g=>!availableGrades.includes(g));
+ $('schoolCompareAvailability').textContent=between?(missing.length?'В исходной таблице нет '+missing.join(', ')+'-х классов. Их можно отметить, но значения будут «Нет данных», а не нули.':'Показаны все доступные параллели из исходной таблицы.'):(choices.length?'Выбрано классов: '+selected.filter(c=>choices.includes(c)).length+' из '+choices.length+'.':'В исходной таблице нет классов этой параллели.');
+ return choices.filter(id=>selected.includes(id));
+}
 function renderSchoolParallel(){
- const p=H.parallel(data,$('schoolGrade').value,S,T,$('schoolSplit').value==='split'),values=p.totals.map(schoolValue),max=values.length?Math.max(...values):0,min=values.length?Math.min(...values):0;
- $('schoolInsight').textContent=p.classes.length>1?`${$('schoolGrade').value}-я параллель · ${p.classes.join(', ')}. Разница недельной нагрузки: ${schoolNumber(max-min)} ${schoolUnitText()}.`:'В этой параллели один класс: различия между классами сравнить нельзя.';
- const totalHeaders=['Класс','Уроки / уч. ч.','Минуты','Часы по 60 мин','Учебных дней','Без времени'];
- const gradeRows=[...new Set(data.classes.map(H.grade).filter(Boolean))].sort((a,b)=>+a-+b).map(grade=>{const rows=schoolSnapshot.classes.filter(c=>H.grade(c.name)===grade),count=rows.reduce((n,r)=>n+r.count,0),minutes=rows.reduce((n,r)=>n+r.minutes,0);return {grade,classes:rows.length,count,minutes,average:rows.length?count/rows.length:0}});
- const gradeHeaders=['Параллель','Классов','Уроки / уч. ч. всего','Среднее уроков на класс','Минуты всего'];
- const gradeSummary=schoolTable(gradeHeaders,gradeRows.map(r=>[`<button data-school-grade="${r.grade}">${r.grade}-я параллель</button>`,r.classes,r.count,schoolNumber(r.average),r.minutes]),'Все параллели · общее и среднее на класс');
- const summary=schoolTable(totalHeaders,p.totals.map(r=>[schoolLink('class',r.name),r.count,r.minutes,schoolNumber(r.minutes/60),r.days,r.unknown]),'Нагрузка классов параллели');
- const matrixHeaders=['Предмет',...p.classes,'Разница макс. − мин.'];
- const matrix=p.subjects.map(r=>{const values=r.values.map(schoolValue),difference=values.length?Math.max(...values)-Math.min(...values):0;return [esc(r.name),...r.values.map(schoolCell),`<span class="${difference?'school-difference':''}">${schoolNumber(difference)}</span>`]});
- $('schoolReport').innerHTML=gradeSummary+summary+schoolTable(matrixHeaders,matrix,'Предметы параллели · '+schoolUnitText());
- schoolCSV=[gradeHeaders,...gradeRows.map(r=>[r.grade,r.classes,r.count,schoolNumber(r.average),r.minutes]),[],['Параллель',$('schoolGrade').value],totalHeaders,...p.totals.map(r=>[r.name,r.count,r.minutes,schoolNumber(r.minutes/60),r.days,r.unknown]),[],['Предмет · '+schoolUnitText(),...p.classes,'Разница макс. − мин.'],...p.subjects.map(r=>{const v=r.values.map(schoolValue);return [r.name,...v.map(schoolNumber),v.length?schoolNumber(Math.max(...v)-Math.min(...v)):0]})];
- $('schoolMethod').textContent+='В матрице 0 означает, что предмет не записан у класса. Разница сравнивает все классы этой параллели, включая нулевые значения. Разные названия предметов не объединяются автоматически. '+schoolSubjectMethod();
+ const between=$('schoolCompareMode').value==='grades',selected=schoolComparisonChoices(),report=H.compare(data,between?'grades':'classes',selected,S,T,$('schoolSplit').value==='split'),items=report.items;
+ $('schoolContext').textContent=(between?'Сравнение параллелей':'Сравнение классов '+$('schoolGrade').value+'-й параллели')+' · полная неделя';
+ if(!items.length){$('schoolInsight').textContent='Отметьте хотя бы две параллели или два класса для сравнения.';$('schoolReport').innerHTML='<p class="tool-empty">Выбор пуст. Данные не подменяются общими итогами школы.</p>';$('schoolMethod').textContent='Сравнение использует только исходную таблицу первой смены.';return}
+ const available=items.filter(i=>i.available),basis=between&&$('schoolCompareBasis').value==='average',dimension=$('schoolCompareDimension').value;
+ const spread=values=>{const numbers=values.filter(v=>v!==null);return numbers.length<2?null:Math.max(...numbers)-Math.min(...numbers)},show=v=>v===null?'Нет данных':schoolNumber(v),difference=v=>v===null?'—':schoolNumber(v);
+ const headers=['Показатель',...items.map(i=>i.label),'Разница макс. − мин.'];
+ const specs=[['Классов в таблице',i=>i.classCount],['Уроки / учебные часы — всего',i=>i.count],['Минуты занятий — всего',i=>i.minutes],['Часы по 60 минут — всего',i=>i.minutes/60],['Разных предметов',i=>i.subjectCount],['Разных учителей',i=>i.teacherCount],['Разных кабинетов / помещений',i=>i.roomCount],['Учебных дней',i=>i.days],['Слотов без времени',i=>i.unknown]];
+ if(between)specs.push(['Уроков в среднем на класс',i=>i.count/i.classCount],['Минут в среднем на класс',i=>i.minutes/i.classCount],['Часов по 60 минут в среднем на класс',i=>i.minutes/60/i.classCount],['Предметов в среднем у класса',i=>i.avgSubjects],['Учителей в среднем у класса',i=>i.avgTeachers],['Кабинетов в среднем у класса',i=>i.avgRooms]);
+ const summary=specs.map(([name,get])=>{const values=items.map(i=>i.available?get(i):null);return {name,values,delta:spread(values)}});
+ const matrix=report.matrices[dimension].map(r=>{const values=r.values.map((v,index)=>v===null?null:schoolValue(v)/(basis?items[index].classCount:1));return {...r,numbers:values,delta:spread(values)}});
+ const onlyDiff=$('schoolOnlyDifferences').checked,shown=onlyDiff?matrix.filter(r=>r.delta!==null&&r.delta>1e-9):matrix,changed=matrix.filter(r=>r.delta!==null&&r.delta>1e-9).length;
+ const summaryRows=summary.map(r=>[esc(r.name),...r.values.map(show),`<span class="${r.delta?'school-difference':''}">${difference(r.delta)}</span>`]);
+ const dimensionNames={subject:'Предметы',teacher:'Учителя',room:'Кабинеты',day:'Дни недели'},matrixHeaders=[dimensionNames[dimension],...items.map(i=>i.label),'Разница макс. − мин.'];
+ const matrixRows=shown.map(r=>[dimension==='subject'||dimension==='day'?esc(r.name):schoolLink(dimension,r.name),...r.numbers.map((v,index)=>`${show(v)}${r.values[index]?.unknown&&$('schoolUnit').value!=='count'?` <small>+ ${r.values[index].unknown} слотов без времени</small>`:''}`),`<span class="${r.delta?'school-difference':''}">${difference(r.delta)}</span>`]);
+ const unit=schoolUnitText()+(basis?' в среднем на класс':' всего');
+ $('schoolReport').innerHTML=schoolTable(headers,summaryRows,'Общие показатели: число предметов, учителей и кабинетов — уникальные значения')+schoolTable(matrixHeaders,matrixRows,dimensionNames[dimension]+' · '+unit)+(onlyDiff&&!shown.length?'<p class="tool-hint">Для сравнения нужны две группы с данными. Если они выбраны, различий по этому срезу нет.</p>':'');
+ const loads=available.map(i=>schoolValue(i)/(basis?i.classCount:1)),loadDelta=spread(loads),unknown=available.reduce((n,i)=>n+i.unknown,0);
+ $('schoolInsight').textContent=(available.length>=2?`Сравниваются: ${available.map(i=>i.label).join(', ')}. Разница нагрузки: ${schoolNumber(loadDelta)} ${unit}. `:'Нужно хотя бы две группы с данными для вычисления различий. ')+`В срезе «${dimensionNames[dimension]}» строк с различиями: ${changed} из ${matrix.length}.`+(items.some(i=>!i.available)?' Группы без данных не участвуют в разнице.':'');
+ $('schoolChart').innerHTML=available.map((i,index)=>`<div><span>${esc(i.label)}</span><i><b style="width:${loads[index]/Math.max(1,...loads)*100}%"></b></i><strong>${schoolNumber(loads[index])}</strong></div>`).join('');
+ const method='Данные первой смены за неделю. Между параллелями можно сравнить итоги и среднее на класс; общие показатели подписаны отдельно. Учителя, кабинеты и предметы считаются без повторения имён; пустые поля учителя и кабинета не увеличивают их количество; среднее их числа вычисляется по отдельным классам. В подробной матрице учителей и кабинетов считаются уроки классов: одно совместное занятие двух классов даёт две записи нагрузки классов. Разница — максимум минус минимум среди выбранных групп с данными. Ноль означает отсутствие записи в имеющемся расписании; «Нет данных» — отсутствие всей группы в источнике. Длительность без известных звонков не входит в минуты и часы по 60 минут. '+schoolSubjectMethod();
+ $('schoolMethod').textContent=method+(unknown?' Слотов без времени в выбранных группах: '+unknown+'.':'');
+ schoolCSV=[['Режим',between?'Между параллелями':'Классы внутри '+$('schoolGrade').value+'-й параллели'],['Подробный срез',dimensionNames[dimension]],['Единица подробностей',unit],['Предметы подгрупп',$('schoolSplit').selectedOptions[0].textContent],headers,...summary.map(r=>[r.name,...r.values.map(show),difference(r.delta)]),[],matrixHeaders,...shown.map(r=>[r.name,...r.numbers.map(show),difference(r.delta)]),[],['Методика',method]];
 }
 function renderSchoolToday(){
  if(!P.dateOK($('schoolTodayDate').value)){$('schoolReport').innerHTML='<p>Укажите корректную дату.</p>';return}
@@ -94,7 +119,7 @@ function renderSchoolToday(){
 }
 $('schoolPanel').addEventListener('click',e=>{
  const tab=e.target.closest('[data-school-tab]');if(tab){schoolTab=tab.dataset.schoolTab;renderSchoolReport();return}
- const gradeButton=e.target.closest('[data-school-grade]');if(gradeButton){$('schoolGrade').value=gradeButton.dataset.schoolGrade;renderSchoolReport();return}
+ const gradeButton=e.target.closest('[data-school-grade]');if(gradeButton){$('schoolGrade').value=gradeButton.dataset.schoolGrade;$('schoolCompareMode').value='classes';renderSchoolReport();return}
  const button=e.target.closest('[data-school-mode]');if(!button||!data)return;
  const m=button.dataset.schoolMode,name=button.dataset.schoolEntity;clearFilters();view='week';
  if(m==='school'){$('searchAll').checked=true}else if(m==='subject'){$('searchAll').checked=true;if($('schoolSplit').value==='combined'){initialSubject=schoolSnapshot.subjects.find(r=>r.name===name)?.lessons[0]?.subject||''}else $('search').value='"'+name.replace(/"/g,'')+'"'}else{mode=m;entity=name}
@@ -105,4 +130,8 @@ $('schoolSplit').onchange=()=>{if(!data)return;schoolSnapshot=H.school(data,S,T,
 ['schoolTodayClass','schoolTodayDate','schoolTodayOnly'].forEach(id=>$(id).onchange=renderSchoolReport);
 $('schoolTodayNow').onclick=()=>{$('schoolTodayDate').value=T.clock().date;renderSchoolReport()};
 $('exportSchool').onclick=()=>{if(!schoolCSV.length)return toast('Нет данных для выгрузки');download('школа-'+schoolTab+'.csv',csv([['Раздел',schoolLabels[schoolTab]],...schoolCSV]),'text/csv;charset=utf-8')};
+$('schoolCompareMode').onchange=renderSchoolReport;$('schoolCompareBasis').onchange=renderSchoolReport;$('schoolCompareDimension').onchange=renderSchoolReport;$('schoolOnlyDifferences').onchange=renderSchoolReport;
+$('schoolCompareChoices').onchange=()=>{const selected=[...$('schoolCompareChoices').querySelectorAll('input:checked')].map(el=>el.value);if($('schoolCompareMode').value==='grades')schoolComparedGrades=selected;else schoolComparedClasses[$('schoolGrade').value]=selected;renderSchoolReport()};
+$('schoolCompareAll').onclick=()=>{if(!data)return;if($('schoolCompareMode').value==='grades')schoolComparedGrades=[...new Set(data.classes.map(H.grade))];else schoolComparedClasses[$('schoolGrade').value]=data.classes.filter(c=>H.grade(c)===$('schoolGrade').value);renderSchoolReport()};
+$('schoolCompareNone').onclick=()=>{if($('schoolCompareMode').value==='grades')schoolComparedGrades=[];else schoolComparedClasses[$('schoolGrade').value]=[];renderSchoolReport()};
 renderSchool();

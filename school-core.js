@@ -23,6 +23,20 @@
   const subjects=groups(lessons,'subject',S,T,split).sort((a,b)=>a.name.localeCompare(b.name,'ru')).map(g=>({name:g.name,values:classes.map(cls=>metrics(g.lessons.filter(l=>l.class===cls),T.slot))}));
   return {classes,totals,subjects};
  }
+ function compare(data,mode,selections,S,T,split=false){
+  const items=[...new Set(selections.map(String))].map(id=>{
+   const classes=mode==='grades'?data.classes.filter(c=>grade(c)===id):data.classes.filter(c=>c===id),lessons=data.lessons.filter(l=>classes.includes(l.class));
+   const subjects=groups(lessons,'subject',S,T,split),teachers=groups(lessons,'teacher',S,T),rooms=groups(lessons,'room',S,T);
+   const classDetails=classes.map(cls=>{const ls=lessons.filter(l=>l.class===cls);return {subjects:groups(ls,'subject',S,T,split).length,teachers:groups(ls,'teacher',S,T).length,rooms:groups(ls,'room',S,T).length}});
+   return {id,label:mode==='grades'?id+'-я параллель':id,available:classes.length>0,classNames:classes,classCount:classes.length,...metrics(lessons,T.slot),subjectCount:subjects.length,teacherCount:teachers.length,roomCount:rooms.length,avgSubjects:classes.length?classDetails.reduce((n,c)=>n+c.subjects,0)/classes.length:0,avgTeachers:classes.length?classDetails.reduce((n,c)=>n+c.teachers,0)/classes.length:0,avgRooms:classes.length?classDetails.reduce((n,c)=>n+c.rooms,0)/classes.length:0,details:{subject:subjects,teacher:teachers,room:rooms,day:Array.from({length:6},(_,day)=>({name:S.DAYS[day],lessons:lessons.filter(l=>l.day===day)}))}};
+  });
+  const matrices={};
+  for(const dimension of ['subject','teacher','room','day']){
+   const names=new Map();for(const item of items)for(const g of item.details[dimension])if(!names.has(S.norm(g.name)))names.set(S.norm(g.name),g.name);
+   matrices[dimension]=[...names.values()].sort((a,b)=>dimension==='day'?S.DAYS.indexOf(a)-S.DAYS.indexOf(b):a.localeCompare(b,'ru',{numeric:true})).map(name=>({name,values:items.map(item=>{if(!item.available)return null;const group=item.details[dimension].find(g=>S.norm(g.name)===S.norm(name));return metrics(group?.lessons||[],T.slot)})}));
+  }
+  return {items,matrices};
+ }
  function teachersForClass(data,cls,date,S,T){
   const day=(new Date(date+'T12:00:00Z').getUTCDay()+6)%7,off=T.holiday(date),schoolToday=off?[]:data.lessons.filter(l=>l.day===day);
   const classToday=schoolToday.filter(l=>l.class===cls),names=[...new Set(data.lessons.filter(l=>l.class===cls).flatMap(S.teachers))].sort((a,b)=>a.localeCompare(b,'ru'));
@@ -32,5 +46,5 @@
   }).filter(t=>t.all.length);
   return {day,off,classToday,teachers,absent:names.filter(n=>!teachers.some(t=>t.name===n)),missing:classToday.filter(l=>!S.teachers(l).length)};
  }
- const api={classSlot,timeSlot,grade,metrics,groups,school,parallel,teachersForClass};if(typeof module!=='undefined')module.exports=api;else root.SchoolStats=api;
+ const api={classSlot,timeSlot,grade,metrics,groups,school,parallel,compare,teachersForClass};if(typeof module!=='undefined')module.exports=api;else root.SchoolStats=api;
 })(typeof window==='undefined'?globalThis:window);
