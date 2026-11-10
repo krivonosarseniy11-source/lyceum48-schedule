@@ -1,6 +1,6 @@
 'use strict';
-const CACHE='lyceum48-shell-v8';
-const SHELL=['./','index.html','style.css?v=1.8.0','app.js?v=1.8.0','parser.js?v=1.8.0','timing.js?v=1.8.0','extras.js?v=1.8.0','planner-core.js?v=1.8.0','planner.js?v=1.8.0','search-core.js?v=1.8.0','search-tools.js?v=1.8.0','daily-core.js?v=1.8.0','daily.js?v=1.8.0','school-core.js?v=1.8.0','school.js?v=1.8.0','useful-core.js?v=1.8.0','useful.js?v=1.8.0','snapshot.json','manifest.webmanifest','assets/logo.png','assets/lyceum.webp','assets/icon192.png','assets/icon512.png'];
+const CACHE='lyceum48-shell-v9';
+const SHELL=['./','index.html','style.css?v=1.9.0','app.js?v=1.9.0','parser.js?v=1.9.0','timing.js?v=1.9.0','extras.js?v=1.9.0','planner-core.js?v=1.9.0','planner.js?v=1.9.0','search-core.js?v=1.9.0','search-tools.js?v=1.9.0','daily-core.js?v=1.9.0','daily.js?v=1.9.0','school-core.js?v=1.9.0','school.js?v=1.9.0','useful-core.js?v=1.9.0','useful.js?v=1.9.0','features-core.js?v=1.9.0','features.js?v=1.9.0','snapshot.json','manifest.webmanifest','assets/logo.png','assets/lyceum.webp','assets/icon192.png','assets/icon512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('lyceum48-shell-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{

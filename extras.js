@@ -26,9 +26,10 @@ function renderLoadChart(all){
 function renderRooms(){
  if(!data)return;const time=$('roomTime').value;
  if(!time){$('roomResults').innerHTML='';$('roomsSummary').textContent='Укажите время для проверки.';return}
- const rooms=T.freeRooms(data.lessons,+$('roomDay').value,time,S),free=rooms.filter(r=>!r.busy),shown=$('onlyFree').checked?free:rooms;
- $('roomsSummary').textContent=`${S.DAYS[+$('roomDay').value]} · ${time} МСК · без занятий ${free.length} из ${rooms.length}`;
- $('roomResults').innerHTML=shown.map(r=>`<button data-find-room="${esc(r.room)}" class="${r.busy?'busy':'free'}"><strong>${esc(r.room)}</strong><small>${r.busy?'Занят':'Нет занятий'}</small></button>`).join('')||'<p>По выбранным условиям кабинетов нет.</p>';
+ const result=window.Features.rooms(data.lessons,+$('roomDay').value,time,$('roomEnd').value,S,T);if(result.error){$('roomResults').innerHTML='';$('roomsSummary').textContent=result.error;return}
+ const rooms=result.rooms,free=rooms.filter(r=>!r.busy&&!r.unknown),shown=$('onlyFree').checked?free:rooms;
+ $('roomsSummary').textContent=`${S.DAYS[+$('roomDay').value]} · ${time}${$('roomEnd').value?'–'+$('roomEnd').value:''} МСК · без занятий ${free.length} из ${rooms.length} · с неизвестным временем: ${rooms.filter(r=>r.unknown).length}`;
+ $('roomResults').innerHTML=shown.map(r=>`<button data-find-room="${esc(r.room)}" data-room-unknown="${r.unknown}" class="${r.busy||r.unknown?'busy':'free'}"><strong>${esc(r.room)}</strong><small>${r.busy?'Занят':r.unknown?'Время не уточнено':'Нет занятий'}</small></button>`).join('')||'<p>По выбранным условиям кабинетов нет.</p>';
 }
 $('searchAll').onchange=()=>{if(data)populate()};
 $('prevDay').onclick=()=>{day=(day+5)%6;view='day';render()};
@@ -46,8 +47,8 @@ $('exportSchedule').onclick=()=>{const ls=filteredLessons().filter(l=>view==='we
 $('exportStats').onclick=()=>{const rows=[...document.querySelectorAll('.stats-table tr')].map(tr=>[...tr.querySelectorAll('th,td')].map(td=>td.textContent));download('статистика.csv',csv(rows),'text/csv;charset=utf-8')};
 $('exportCalendar').onclick=()=>{const text=T.calendar(filteredLessons());if(!text.includes('BEGIN:VEVENT'))return toast('На ближайшие 4 недели занятий по фильтрам нет');download('лицей48-4недели.ics',text,'text/calendar;charset=utf-8');toast('Календарь на 4 недели. Перед импортом проверьте выбранные фильтры')};
 $('roomDay').innerHTML=S.DAYS.slice(0,6).map((d,i)=>`<option value="${i}">${d}</option>`).join('');$('roomDay').value=displayDay(T.clock().day);
-['roomDay','roomTime','onlyFree'].forEach(id=>$(id).onchange=renderRooms);
-$('roomResults').onclick=e=>{const b=e.target.closest('[data-find-room]');if(b){openEntity('room',b.dataset.findRoom);day=+$('roomDay').value;$('atTime').value=$('roomTime').value;view='day';render();$('schedule').scrollIntoView({behavior:'smooth',block:'start'})}};
+['roomDay','roomTime','roomEnd','onlyFree'].forEach(id=>$(id).onchange=renderRooms);
+$('roomResults').onclick=e=>{const b=e.target.closest('[data-find-room]');if(b){openEntity('room',b.dataset.findRoom);day=+$('roomDay').value;if(b.dataset.roomUnknown==='true')$('atTime').value='';else if($('roomEnd').value){$('atTime').value='';advanced.start=$('roomTime').value;advanced.end=$('roomEnd').value;syncAdvancedUI()}else $('atTime').value=$('roomTime').value;view='day';render();$('schedule').scrollIntoView({behavior:'smooth',block:'start'})}};
 document.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey)return;const editing=e.target.matches('input,textarea,select,[contenteditable]');if(e.key==='/'&&!editing){e.preventDefault();$('search').focus()}if(e.key==='Escape'&&!e.target.matches('textarea')){clearFilters();render();$('search').blur()}});
 window.addEventListener('offline',()=>toast('Нет сети — показываем сохранённое расписание'));
 window.addEventListener('online',()=>{toast('Соединение восстановлено');refresh()});

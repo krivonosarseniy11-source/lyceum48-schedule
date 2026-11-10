@@ -40,6 +40,7 @@ function renderDailyTasks(){
  const tasks=homework.filter(t=>t.class===dailyClassName&&t.due===dailyDate&&!t.done).sort((a,b)=>(a.priority==='high'?-1:0)-(b.priority==='high'?-1:0)||a.subject.localeCompare(b.subject,'ru'));
  $('dailyTaskCount').textContent='· '+tasks.length;
  $('dailyTasks').innerHTML=tasks.length?tasks.map(t=>`<label class="daily-task"><input type="checkbox" data-daily-task="${esc(t.id)}"><span><strong>${esc(t.subject)}${t.priority==='high'?' · Важное':''}</strong><span>${esc(t.text)}</span></span></label>`).join(''):'<p class="tool-hint">Невыполненных заданий на эту дату нет.</p>';
+ if(typeof featureEventsForDay==='function')$('dailyTasks').insertAdjacentHTML('beforeend',featureEventsForDay(dailyClassName,dailyDate));
  const overdue=homework.filter(t=>t.class===dailyClassName&&!t.done&&t.due<T.clock().date).length;$('dailyOverdue').hidden=!overdue;$('dailyOverdue').textContent='Просроченные · '+overdue;
 }
 $('dailyTasks').onchange=e=>{const id=e.target.dataset.dailyTask;if(!id)return;const task=homework.find(t=>t.id===id);if(task){task.done=e.target.checked;saveHomework();toast('Задание выполнено')}};

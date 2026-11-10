@@ -1,7 +1,7 @@
 'use strict';
 const H=window.SchoolStats;
 let schoolTab='classes',schoolSource=null,schoolSnapshot=null,schoolCSV=[];
-const schoolLabels={classes:'Все классы',parallels:'Различия параллелей',days:'Нагрузка школы по дням',teachers:'Учителя · нагрузка за неделю',rooms:'Кабинеты · занятость за неделю',subjects:'Предметы · часы по школе',today:'Учителя класса в школе'};
+const schoolLabels={audit:'Проверка исходной таблицы',classes:'Все классы',parallels:'Различия параллелей',days:'Нагрузка школы по дням',teachers:'Учителя · нагрузка за неделю',rooms:'Кабинеты · занятость за неделю',subjects:'Предметы · часы по школе',today:'Учителя класса в школе'};
 const schoolNumber=n=>Number(n).toLocaleString('ru-RU',{maximumFractionDigits:2});
 const schoolValue=r=>$('schoolUnit').value==='count'?r.count:$('schoolUnit').value==='minutes'?r.minutes:r.minutes/60;
 const schoolUnitText=()=>$('schoolUnit').value==='count'?'уч. ч. / уроков':$('schoolUnit').value==='minutes'?'мин':'ч по 60 мин';
@@ -23,12 +23,13 @@ function renderSchoolReport(){
  const snapshot=schoolSnapshot,total=snapshot.total;
  $('schoolTotals').innerHTML=[[snapshot.classes.length,'классов'],[total.count,'уроков / учебных часов'],[total.minutes,'минут занятий'],[schoolNumber(total.minutes/60),'часов по 60 минут'],[snapshot.teachers.length,'учителей'],[snapshot.rooms.length,'кабинетов / помещений']].map(([n,label])=>`<div><strong>${n}</strong><span>${label}</span></div>`).join('');
  document.querySelectorAll('[data-school-tab]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.schoolTab===schoolTab));
- $('schoolUnitLabel').hidden=schoolTab==='today';$('schoolSubjectLabel').hidden=!['subjects','parallels'].includes(schoolTab);$('schoolGradeLabel').hidden=schoolTab!=='parallels'||$('schoolCompareMode').value!=='classes';$('schoolComparisonControls').hidden=schoolTab!=='parallels';
+ $('schoolUnitLabel').hidden=['today','audit'].includes(schoolTab);$('auditControls').hidden=schoolTab!=='audit';$('schoolSubjectLabel').hidden=!['subjects','parallels'].includes(schoolTab);$('schoolGradeLabel').hidden=schoolTab!=='parallels'||$('schoolCompareMode').value!=='classes';$('schoolComparisonControls').hidden=schoolTab!=='parallels';
  for(const id of ['schoolTodayClassLabel','schoolTodayDateLabel','schoolTodayNow','schoolTodayOnlyLabel'])$(id).hidden=schoolTab!=='today';
  $('schoolContext').textContent=schoolLabels[schoolTab]+' · '+(schoolTab==='today'?'расписание на дату':'полная неделя · сортировка по '+schoolUnitText());
  $('schoolChart').innerHTML='';$('schoolInsight').textContent='';$('schoolReport').innerHTML='';schoolCSV=[];
  const baseMethod='Учебный час здесь — один урок, без пересчёта в 45 минут. Время по 60 минут = сумма известных минут / 60. '+(total.unknown?`По школе ${total.unknown} слотов без времени; в минуты и часы по 60 минут они не входят. `:'');
  $('schoolMethod').textContent=baseMethod;
+ if(schoolTab==='audit'){if(typeof renderAudit==='function')renderAudit();return}
  if(schoolTab==='today'){renderSchoolToday();return}
  if(schoolTab==='parallels'){renderSchoolParallel();return}
  if(schoolTab==='days'){renderSchoolDays();return}
@@ -79,6 +80,7 @@ function schoolComparisonChoices(){
  return choices.filter(id=>selected.includes(id));
 }
 function renderSchoolParallel(){
+ if(typeof renderComparisonPresets==='function')renderComparisonPresets();
  const between=$('schoolCompareMode').value==='grades',selected=schoolComparisonChoices(),report=H.compare(data,between?'grades':'classes',selected,S,T,$('schoolSplit').value==='split'),items=report.items;
  $('schoolContext').textContent=(between?'Сравнение параллелей':'Сравнение классов '+$('schoolGrade').value+'-й параллели')+' · полная неделя';
  if(!items.length){$('schoolInsight').textContent='Отметьте хотя бы две параллели или два класса для сравнения.';$('schoolReport').innerHTML='<p class="tool-empty">Выбор пуст. Данные не подменяются общими итогами школы.</p>';$('schoolMethod').textContent='Сравнение использует только исходную таблицу первой смены.';return}

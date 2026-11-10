@@ -2,7 +2,9 @@
 const P=window.Planner;
 let homework=[];
 try{homework=P.tasks(readLocal('homework',[]))}catch{}
-let editingTask=null,plannerReady=false,lastDeletedTask=null,packingItems={};
+let editingTask=null,plannerReady=false,lastDeletedTask=null,packingItems={},classEvents=[],comparisonPresets=[];
+try{classEvents=P.events(readLocal('classEvents',[]))}catch{}
+try{comparisonPresets=P.presets(readLocal('comparisonPresets',[]))}catch{}
 try{packingItems=P.packing(readLocal('packingItems',{}))}catch{}
 const bagChecks=readLocal('bagChecks',{});
 const safeBagChecks=bagChecks&&typeof bagChecks==='object'&&!Array.isArray(bagChecks)?bagChecks:{};
@@ -63,19 +65,20 @@ function renderComparison(){
 }
 ['compareA','compareB','compareDay'].forEach(id=>$(id).onchange=renderComparison);
 $('copySchedule').onclick=async()=>{const lessons=filteredLessons().filter(l=>view==='week'||l.day===day).sort((a,b)=>a.day-b.day||a.number-b.number||a.class.localeCompare(b.class,'ru'));if(!lessons.length)return toast('Нет уроков для копирования');const text=[$('title').textContent,...lessons.map(l=>`${S.DAYS[l.day]} · ${l.number}. ${T.slot(l.number)?.label||'Время не указано'} · ${l.subject} · ${l.class} · ${l.teacher||'Учитель не указан'} · ${l.room||'Кабинет не указан'}`)].join('\n');try{await navigator.clipboard.writeText(text);toast('Расписание скопировано текстом')}catch{download('расписание.txt',text,'text/plain;charset=utf-8');toast('Текст сохранён в файл')}};
-$('backupExport').onclick=()=>{download('лицей48-личные-данные.json',JSON.stringify({app:'lyceum48',version:1,exportedAt:new Date().toISOString(),tasks:homework,notes,favorites,packingItems,myClass:storage.get('myClass')||''},null,2),'application/json');$('backupStatus').textContent='Копия скачана. Файл содержит личные заметки, задания и подсказки для портфеля.'};
+$('backupExport').onclick=()=>{download('лицей48-личные-данные.json',JSON.stringify({app:'lyceum48',version:1,exportedAt:new Date().toISOString(),tasks:homework,notes,favorites,packingItems,events:classEvents,comparisonPresets,myClass:storage.get('myClass')||''},null,2),'application/json');$('backupStatus').textContent='Копия скачана. Файл содержит личные заметки, задания и подсказки для портфеля.'};
 $('backupImport').onchange=async e=>{
  const file=e.target.files[0];if(!file)return;
  try{
   if(file.size>3*1024*1024)throw Error('Максимальный размер копии — 3 МБ');const imported=P.backup(JSON.parse(await file.text()));
   const ids=new Set(homework.map(t=>t.id)),added=imported.tasks.filter(t=>!ids.has(t.id));if(homework.length+added.length>2000)throw Error('После объединения получится больше 2000 заданий');
+  const eventIds=new Set(classEvents.map(e=>e.id)),mergedEvents=[...classEvents,...imported.events.filter(e=>!eventIds.has(e.id))],mergedPresets=[...comparisonPresets];if(mergedEvents.length>2000)throw Error('После объединения больше 2000 событий');for(const p of imported.comparisonPresets)if(mergedPresets.length<20&&!mergedPresets.some(c=>c.id===p.id||c.name===p.name))mergedPresets.push(p);
   const mergedPacking={...imported.packingItems,...packingItems},mergedNotes={...imported.notes,...notes},mergedFavorites=[...favorites];
   for(const f of imported.favorites)if(mergedFavorites.length<8&&!mergedFavorites.some(v=>v.mode===f.mode&&v.entity===f.entity))mergedFavorites.push(f);
-  const updates={packingItems:JSON.stringify(mergedPacking),homework:JSON.stringify([...homework,...added]),lessonNotes:JSON.stringify(mergedNotes),favorites:JSON.stringify(mergedFavorites)};
+  const updates={classEvents:JSON.stringify(mergedEvents),comparisonPresets:JSON.stringify(mergedPresets),packingItems:JSON.stringify(mergedPacking),homework:JSON.stringify([...homework,...added]),lessonNotes:JSON.stringify(mergedNotes),favorites:JSON.stringify(mergedFavorites)};
   if(!storage.get('myClass')&&imported.myClass)updates.myClass=imported.myClass;
   const previous=Object.fromEntries(Object.keys(updates).map(k=>[k,localStorage.getItem(k)]));
   try{for(const [k,v] of Object.entries(updates))localStorage.setItem(k,v)}catch(error){for(const [k,v] of Object.entries(previous))try{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch{}throw Error('Не удалось сохранить копию: проверьте свободное место и доступ к хранилищу')}
-  homework.push(...added);packingItems=mergedPacking;notes=mergedNotes;favorites=mergedFavorites;render();renderTasks();renderBag();$('backupStatus').textContent=`Данные объединены. Добавлено заданий: ${added.length}. Текущие записи сохранены.`;
+  homework.push(...added);classEvents=mergedEvents;comparisonPresets=mergedPresets;packingItems=mergedPacking;notes=mergedNotes;favorites=mergedFavorites;render();renderTasks();renderBag();$('backupStatus').textContent=`Данные объединены. Добавлено заданий: ${added.length}. Текущие записи сохранены.`;
  }catch(error){$('backupStatus').textContent='Копия не загружена. '+(error instanceof SyntaxError?'Файл не является корректным JSON.':error.message)}finally{e.target.value=''}
 };
 // Data can arrive from the local cache before this script, or asynchronously later.

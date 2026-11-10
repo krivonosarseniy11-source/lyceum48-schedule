@@ -13,8 +13,9 @@ function renderUsefulContent(){
  if(!data)return;
  document.querySelectorAll('[data-useful-tab]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.usefulTab===usefulTab));
  for(const id of ['usefulWeekLabel','usefulPrevWeek','usefulThisWeek','usefulNextWeek'])$(id).hidden=usefulTab!=='week';
- for(const id of ['meetingTeacherLabel','meetingDateLabel','meetingDurationLabel'])$(id).hidden=usefulTab!=='meeting';$('changesAllLabel').hidden=usefulTab!=='changes';
+ for(const id of ['meetingTeacherLabel','meetingDateLabel','meetingDurationLabel'])$(id).hidden=usefulTab!=='meeting';$('changesAllLabel').hidden=usefulTab!=='changes';$('eventControls').hidden=usefulTab!=='events';
  usefulCSV=[];usefulMeetingWindows=[];
+ if(usefulTab==='events'){if(typeof renderEvents==='function')renderEvents();return}
  if(usefulTab==='week')renderUsefulWeek();else if(usefulTab==='meeting')renderUsefulMeeting();else renderUsefulChanges();
 }
 function renderUsefulWeek(){
@@ -22,7 +23,7 @@ function renderUsefulWeek(){
  const cls=$('usefulClass').value,start=U.weekStart($('usefulWeek').value);$('usefulWeek').value=start;
  const days=U.week(homework,cls,start),total=days.reduce((s,d)=>s+d.items.length,0),done=days.reduce((s,d)=>s+d.done,0),max=Math.max(0,...days.map(d=>d.open)),overdue=homework.filter(t=>t.class===cls&&!t.done&&t.due<T.clock().date).length;
  $('usefulSummary').textContent=`${cls} · ${usefulDate(start)} — ${usefulDate(D.addDays(start,6))} · выполнено ${done} из ${total}.`+(max?' Больше всего невыполненных: '+days.filter(d=>d.open===max).map(d=>usefulDate(d.date)).join(', ')+` (${max}).`:'');
- $('usefulContent').innerHTML=(overdue?`<button data-useful-overdue>Просроченные задания класса · ${overdue}</button>`:'')+`<div class="week-board">${days.map(d=>{const ls=D.lessonsOn(data.lessons.filter(l=>l.class===cls),d.date,T.holiday);return `<article class="week-day"><h3>${usefulDate(d.date)}</h3><small>${esc(T.holiday(d.date)||`${new Set(ls.map(l=>l.number)).size} уроков по таблице`)} · задания ${d.done}/${d.items.length}</small>${d.items.map(t=>`<label class="week-task ${t.done?'week-task-done':''}"><input type="checkbox" data-week-task="${esc(t.id)}" ${t.done?'checked':''}><span><strong>${esc(t.subject)}${t.priority==='high'?' · Важное':''}</strong><span>${esc(t.text)}</span></span></label>`).join('')||'<p class="tool-hint">Добавленных заданий нет.</p>'}<button data-week-add="${d.date}">＋ Задание на этот день</button></article>`}).join('')}</div>`;
+ $('usefulContent').innerHTML=(overdue?`<button data-useful-overdue>Просроченные задания класса · ${overdue}</button>`:'')+`<div class="week-board">${days.map(d=>{const ls=D.lessonsOn(data.lessons.filter(l=>l.class===cls),d.date,T.holiday);return `<article class="week-day"><h3>${usefulDate(d.date)}</h3><small>${esc(T.holiday(d.date)||`${new Set(ls.map(l=>l.number)).size} уроков по таблице`)} · задания ${d.done}/${d.items.length}</small>${typeof featureEventsForDay==='function'?featureEventsForDay(cls,d.date):''}${d.items.map(t=>`<label class="week-task ${t.done?'week-task-done':''}"><input type="checkbox" data-week-task="${esc(t.id)}" ${t.done?'checked':''}><span><strong>${esc(t.subject)}${t.priority==='high'?' · Важное':''}</strong><span>${esc(t.text)}</span></span></label>`).join('')||'<p class="tool-hint">Добавленных заданий нет.</p>'}<button data-week-add="${d.date}">＋ Задание на этот день</button></article>`}).join('')}</div>`;
  $('usefulMethod').textContent='Здесь только задания, которые вы добавили сами. Выходные и каникулы не скрывают задания с указанным сроком. Отметки выполнения общие с планировщиком и блоком «Мой день».';
  usefulCSV=[['Класс','Дата','Предмет','Задание','Приоритет','Выполнено'],...days.flatMap(d=>d.items.length?d.items.map(t=>[cls,d.date,t.subject,t.text,t.priority==='high'?'Важное':'Обычный',t.done?'Да':'Нет']):[[cls,d.date,'','Нет добавленных заданий','','']])];
 }
