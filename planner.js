@@ -2,10 +2,11 @@
 const P=window.Planner;
 let homework=[];
 try{homework=P.tasks(readLocal('homework',[]))}catch{}
-let editingTask=null,plannerReady=false;
+let editingTask=null,plannerReady=false,lastDeletedTask=null,packingItems={};
+try{packingItems=P.packing(readLocal('packingItems',{}))}catch{}
 const bagChecks=readLocal('bagChecks',{});
 const safeBagChecks=bagChecks&&typeof bagChecks==='object'&&!Array.isArray(bagChecks)?bagChecks:{};
-function saveHomework(){storage.set('homework',JSON.stringify(homework));renderTasks();renderBag();if(typeof renderDaily==='function')renderDaily()}
+function saveHomework(){let saved=true;try{localStorage.setItem('homework',JSON.stringify(homework))}catch{saved=false}$('taskStorageStatus').textContent=saved?'':'Не удалось сохранить задания. Сейчас изменения доступны только в этой вкладке.';renderTasks();renderBag();if(typeof renderDaily==='function')renderDaily();if(typeof renderUseful==='function')renderUseful();return saved}
 function plannerClasses(){
  if(!data)return;
  const preferred=mode==='class'?entity:storage.get('myClass')||data.classes[0];
@@ -28,27 +29,31 @@ $('taskForm').onsubmit=e=>{
  if(!editingTask&&homework.length>=2000)return toast('Сохранено 2000 заданий. Удалите ненужные записи');
  const task={id:editingTask||crypto.randomUUID(),class:$('taskClass').value,subject:$('taskSubject').value,text,due:$('taskDue').value,priority:$('taskPriority').value,done:homework.find(t=>t.id===editingTask)?.done||false};
  try{P.tasks([task])}catch{return toast('Проверьте класс, предмет и текст задания')}
- if(editingTask)homework=homework.map(t=>t.id===editingTask?task:t);else homework.push(task);resetTaskForm();saveHomework();toast('Задание сохранено');
+ if(editingTask)homework=homework.map(t=>t.id===editingTask?task:t);else homework.push(task);resetTaskForm();toast(saveHomework()?'Задание сохранено':'Задание доступно в этой вкладке — сохранение не удалось');
 };
 $('cancelTask').onclick=resetTaskForm;
 $('taskClass').onchange=()=>{resetTaskForm();plannerSubjects();renderTasks();renderBag()};
 $('nextLessonDate').onclick=()=>{if(!data)return;const date=P.nextDate(data.lessons.filter(l=>l.class===$('taskClass').value),$('taskSubject').value,T.clock().date,T.holiday);if(date){$('taskDue').value=date;toast('Срок — ближайший следующий урок по календарю')}else toast('Следующий урок в учебном календаре не найден')};
 ['taskFilter','taskAllClasses'].forEach(id=>$(id).onchange=renderTasks);
 $('taskList').onchange=e=>{if(!e.target.matches('[data-task-done]'))return;const task=homework.find(t=>t.id===e.target.closest('[data-task-id]').dataset.taskId);if(task){task.done=e.target.checked;saveHomework()}};
+$('undoTaskDeletion').onclick=()=>{if(!lastDeletedTask)return;if(homework.length>=2000)return toast('Достигнут лимит 2000 заданий');if(!homework.some(t=>t.id===lastDeletedTask.task.id))homework.splice(Math.min(lastDeletedTask.index,homework.length),0,lastDeletedTask.task);lastDeletedTask=null;$('undoTaskDeletion').hidden=true;saveHomework();toast('Задание восстановлено')};
 $('taskList').onclick=e=>{
  const item=e.target.closest('[data-task-id]');if(!item)return;const task=homework.find(t=>t.id===item.dataset.taskId);if(!task)return;
  if(e.target.closest('[data-task-edit]')){editingTask=task.id;$('taskClass').value=task.class;plannerSubjects();if(!$('taskSubject').querySelector(`option[value="${CSS.escape(task.subject)}"]`)){const option=new Option(task.subject,task.subject);$('taskSubject').add(option)}$('taskSubject').value=task.subject;$('taskDue').value=task.due;$('taskPriority').value=task.priority;$('taskText').value=task.text;$('saveTask').textContent='Сохранить изменения';$('cancelTask').hidden=false;$('taskText').focus()}
- if(e.target.closest('[data-task-delete]')){homework=homework.filter(t=>t.id!==task.id);if(editingTask===task.id)resetTaskForm();saveHomework();toast('Задание удалено')}
+ if(e.target.closest('[data-task-delete]')){lastDeletedTask={task,index:homework.indexOf(task)};$('undoTaskDeletion').hidden=false;homework=homework.filter(t=>t.id!==task.id);if(editingTask===task.id)resetTaskForm();saveHomework();toast('Задание удалено')}
 };
 function renderBag(){
  if(!data||!P.dateOK($('bagDate').value))return;
  const date=$('bagDate').value,cls=$('taskClass').value,weekday=(new Date(date+'T12:00:00Z').getUTCDay()+6)%7,off=T.holiday(date);
  const lessons=off?[]:data.lessons.filter(l=>l.class===cls&&l.day===weekday).sort((a,b)=>a.number-b.number),subjects=[...new Set(lessons.map(l=>l.subject))];
  $('bagHint').textContent=`${cls} · ${off||S.DAYS[weekday]||'Воскресенье'} · ${subjects.length} предметов. Отметки сохраняются для этой даты.`;
- $('bagList').innerHTML=subjects.map((subject,i)=>{const key=JSON.stringify([date,cls,subject]),tasks=homework.filter(t=>t.class===cls&&t.subject===subject&&t.due===date&&!t.done);return `<label class="bag-item"><input type="checkbox" data-bag-key="${esc(key)}" ${safeBagChecks[key]?'checked':''}><span><strong>${esc(subject)}</strong>${tasks.map(t=>`<small>${esc(t.text)}</small>`).join('')}</span></label>`}).join('')||'<p class="tool-empty">По недельному расписанию занятий нет.</p>';
+ $('bagList').innerHTML=subjects.map((subject,i)=>{const key=JSON.stringify([date,cls,subject]),tasks=homework.filter(t=>t.class===cls&&t.subject===subject&&t.due===date&&!t.done);const itemKey=JSON.stringify([cls,subject]);return `<article class="bag-entry"><label class="bag-item"><input type="checkbox" data-bag-key="${esc(key)}" ${safeBagChecks[key]?'checked':''}><span><strong>${esc(subject)}</strong>${tasks.map(t=>`<small>${esc(t.text)}</small>`).join('')}</span></label><label class="packing-item-label">Что взять на этот предмет<input type="text" maxlength="500" data-packing-item="${esc(itemKey)}" value="${esc(packingItems[itemKey]||'')}" placeholder="Например, форма, атлас, линейка…"></label></article>`}).join('')||'<p class="tool-empty">По недельному расписанию занятий нет.</p>';
+ let progress=$('bagProgress');if(!progress){progress=document.createElement('p');progress.id='bagProgress';$('bagHint').after(progress)}updateBagProgress();
 }
 $('bagDate').onchange=renderBag;
-$('bagList').onchange=e=>{const key=e.target.dataset.bagKey;if(!key)return;if(e.target.checked)safeBagChecks[key]=true;else delete safeBagChecks[key];storage.set('bagChecks',JSON.stringify(safeBagChecks))};
+$('bagList').onchange=e=>{const key=e.target.dataset.bagKey;if(!key)return;if(e.target.checked)safeBagChecks[key]=true;else delete safeBagChecks[key];storage.set('bagChecks',JSON.stringify(safeBagChecks));updateBagProgress()};
+function updateBagProgress(){const boxes=[...$('bagList').querySelectorAll('[data-bag-key]')];$('bagProgress').textContent=boxes.length?`Портфель: собрано ${boxes.filter(b=>b.checked).length} из ${boxes.length} предметов`:''}
+$('bagList').addEventListener('input',e=>{const key=e.target.dataset.packingItem;if(!key)return;if(e.target.value)packingItems[key]=e.target.value;else delete packingItems[key];try{localStorage.setItem('packingItems',JSON.stringify(packingItems))}catch{toast('Подсказка осталась в этой вкладке: сохранить её не удалось')}});
 function renderComparison(){
  if(!data)return;const a=$('compareA').value,b=$('compareB').value,rows=P.compare(data.lessons,a,b,+$('compareDay').value),free=rows.filter(r=>!r.a.length&&!r.b.length).map(r=>r.number);
  $('compareHeadingA').textContent=a;$('compareHeadingB').textContent=b;
@@ -58,19 +63,19 @@ function renderComparison(){
 }
 ['compareA','compareB','compareDay'].forEach(id=>$(id).onchange=renderComparison);
 $('copySchedule').onclick=async()=>{const lessons=filteredLessons().filter(l=>view==='week'||l.day===day).sort((a,b)=>a.day-b.day||a.number-b.number||a.class.localeCompare(b.class,'ru'));if(!lessons.length)return toast('Нет уроков для копирования');const text=[$('title').textContent,...lessons.map(l=>`${S.DAYS[l.day]} · ${l.number}. ${T.slot(l.number)?.label||'Время не указано'} · ${l.subject} · ${l.class} · ${l.teacher||'Учитель не указан'} · ${l.room||'Кабинет не указан'}`)].join('\n');try{await navigator.clipboard.writeText(text);toast('Расписание скопировано текстом')}catch{download('расписание.txt',text,'text/plain;charset=utf-8');toast('Текст сохранён в файл')}};
-$('backupExport').onclick=()=>{download('лицей48-личные-данные.json',JSON.stringify({app:'lyceum48',version:1,exportedAt:new Date().toISOString(),tasks:homework,notes,favorites,myClass:storage.get('myClass')||''},null,2),'application/json');$('backupStatus').textContent='Копия скачана. Файл содержит ваши личные заметки и задания.'};
+$('backupExport').onclick=()=>{download('лицей48-личные-данные.json',JSON.stringify({app:'lyceum48',version:1,exportedAt:new Date().toISOString(),tasks:homework,notes,favorites,packingItems,myClass:storage.get('myClass')||''},null,2),'application/json');$('backupStatus').textContent='Копия скачана. Файл содержит личные заметки, задания и подсказки для портфеля.'};
 $('backupImport').onchange=async e=>{
  const file=e.target.files[0];if(!file)return;
  try{
   if(file.size>3*1024*1024)throw Error('Максимальный размер копии — 3 МБ');const imported=P.backup(JSON.parse(await file.text()));
   const ids=new Set(homework.map(t=>t.id)),added=imported.tasks.filter(t=>!ids.has(t.id));if(homework.length+added.length>2000)throw Error('После объединения получится больше 2000 заданий');
-  const mergedNotes={...imported.notes,...notes},mergedFavorites=[...favorites];
+  const mergedPacking={...imported.packingItems,...packingItems},mergedNotes={...imported.notes,...notes},mergedFavorites=[...favorites];
   for(const f of imported.favorites)if(mergedFavorites.length<8&&!mergedFavorites.some(v=>v.mode===f.mode&&v.entity===f.entity))mergedFavorites.push(f);
-  const updates={homework:JSON.stringify([...homework,...added]),lessonNotes:JSON.stringify(mergedNotes),favorites:JSON.stringify(mergedFavorites)};
+  const updates={packingItems:JSON.stringify(mergedPacking),homework:JSON.stringify([...homework,...added]),lessonNotes:JSON.stringify(mergedNotes),favorites:JSON.stringify(mergedFavorites)};
   if(!storage.get('myClass')&&imported.myClass)updates.myClass=imported.myClass;
   const previous=Object.fromEntries(Object.keys(updates).map(k=>[k,localStorage.getItem(k)]));
   try{for(const [k,v] of Object.entries(updates))localStorage.setItem(k,v)}catch(error){for(const [k,v] of Object.entries(previous))try{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch{}throw Error('Не удалось сохранить копию: проверьте свободное место и доступ к хранилищу')}
-  homework.push(...added);notes=mergedNotes;favorites=mergedFavorites;render();renderTasks();renderBag();$('backupStatus').textContent=`Данные объединены. Добавлено заданий: ${added.length}. Текущие записи сохранены.`;
+  homework.push(...added);packingItems=mergedPacking;notes=mergedNotes;favorites=mergedFavorites;render();renderTasks();renderBag();$('backupStatus').textContent=`Данные объединены. Добавлено заданий: ${added.length}. Текущие записи сохранены.`;
  }catch(error){$('backupStatus').textContent='Копия не загружена. '+(error instanceof SyntaxError?'Файл не является корректным JSON.':error.message)}finally{e.target.value=''}
 };
 // Data can arrive from the local cache before this script, or asynchronously later.

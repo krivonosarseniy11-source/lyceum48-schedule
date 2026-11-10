@@ -1,10 +1,11 @@
 'use strict';
-const S=window.Schedule,T=window.Timing,Q=window.SearchTools,$=id=>document.getElementById(id);
+const S=window.Schedule,T=window.Timing,Q=window.SearchTools,U=window.Useful,$=id=>document.getElementById(id);
 const SHEET='1tGzeVcjc4gKja-uegpOFkvOW61I50SP3zPipSCfTxqY';
 const SOURCE=`https://docs.google.com/spreadsheets/d/${SHEET}/gviz/tq?gid=82782917&headers=0`;
 const storage={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
 const params=new URLSearchParams(location.search);
-let advanced=Q.readParams(params);
+let advanced=Q.readParams(params),scheduleDataDate='',lastScheduleChange=null;
+try{const saved=JSON.parse(storage.get('scheduleChanges'));if(U.validChange(saved))lastScheduleChange=saved}catch{}
 function matchesLesson(l,criteria){return S.matches(l,{...criteria,search:''})&&Q.queryMatch(l,criteria.search||'',S.rooms)&&Q.filter(l,advanced,S,T)}
 const displayDay=d=>d===6?0:d;
 const selectedLabel=()=>mode==='class'?`${entity} класс`:mode==='teacher'?entity:`Кабинет ${entity}`;
@@ -44,7 +45,7 @@ function render(){
  $('schedule').className=view==='week'?'week':'';
  $('schedule').innerHTML=days.map(d=>{const ls=all.filter(l=>l.day===d).sort((a,b)=>a.number-b.number||a.class.localeCompare(b.class,'ru',{numeric:true}));return `<section class="day-group">${view==='week'?`<h3 class="day-heading">${S.DAYS[d]} <span>${ls.length}</span></h3>`:''}${ls.length?ls.map(card).join(''):`<div class="empty"><div>☀</div><h3>${criteria.search||criteria.subject||$('atTime').value||Q.active(advanced)?'Ничего не нашлось':'Уроков в таблице нет'}</h3><p>${criteria.search||criteria.subject||$('atTime').value||Q.active(advanced)?'Попробуйте другой запрос или сбросьте фильтры.':'Для выбранного дня и расписания занятия не указаны.'}</p></div>`}</section>`}).join('');
  const u=new URL(location.href);const state={mode,entity,day,view,q:$('search').value,subject:$('subject').value,time:$('atTime').value,all:$('searchAll').checked?'1':'',...Q.params(advanced)};for(const [k,v] of Object.entries(state)){if(v!==''&&v!==false)u.searchParams.set(k,v);else u.searchParams.delete(k)}history.replaceState(null,'',u);storage.set('view',view);
- renderStats();tick();if(typeof renderExtras==='function')renderExtras(all);if(typeof renderSearchTools==='function')renderSearchTools();if(typeof renderDaily==='function')renderDaily();if(typeof renderSchool==='function')renderSchool();
+ renderStats();tick();if(typeof renderExtras==='function')renderExtras(all);if(typeof renderSearchTools==='function')renderSearchTools();if(typeof renderDaily==='function')renderDaily();if(typeof renderSchool==='function')renderSchool();if(typeof renderUseful==='function')renderUseful();
 }
 function renderStats(){
  if(!data)return;
@@ -70,7 +71,7 @@ function tick(){
  document.querySelectorAll('[data-lesson-day]').forEach(el=>{const s=T.slot(+el.dataset.lessonNumber);el.classList.toggle('is-current',!state.off&&+el.dataset.lessonDay===c.day&&!!s&&c.seconds>=s.start*60&&c.seconds<s.end*60)});
 }
 function color(s){if(/математ|геометр|физик/i.test(s))return '#d5a744';if(/русск|литерат/i.test(s))return '#8089bf';if(/физическ.*культур/i.test(s))return '#64a88a';if(/англий/i.test(s))return '#d68d76';return '#8eaeaf'}
-function accept(payload,date,kind){const next=S.parse(payload),changed=!data||JSON.stringify(next)!==JSON.stringify(data);data=next;if(changed)populate();$('status').textContent=`${kind} · ${new Date(date).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} МСК`;$('status').classList.toggle('warning',kind!=='Из таблицы');}
+function accept(payload,date,kind){const next=S.parse(payload),changed=!data||JSON.stringify(next)!==JSON.stringify(data);if(data&&changed&&kind==='Из таблицы'){const changes=U.diff(data.lessons,next.lessons);if(changes.length){lastScheduleChange={date,from:scheduleDataDate,changes};storage.set('scheduleChanges',JSON.stringify(lastScheduleChange))}}scheduleDataDate=date;data=next;if(changed)populate();$('status').textContent=`${kind} · ${new Date(date).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} МСК`;$('status').classList.toggle('warning',kind!=='Из таблицы');if(typeof renderUseful==='function')renderUseful();}
 function loadLive(){return new Promise((resolve,reject)=>{
  if(!navigator.onLine){reject(new Error('Нет соединения'));return}
  const cb='scheduleCallback'+Date.now(),script=document.createElement('script');let timer;
